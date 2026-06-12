@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ATHLETE
+// ─────────────────────────────────────────────
+
+model Athlete {
+  id          String   @id @default(cuid())
+  name        String
+  birthdate   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // All time-series logs hang off the athlete
+  measurements  Measurement[]
+  sleepLogs     SleepLog[]
+  trainingLogs  TrainingLog[]
+  nutritionLogs NutritionLog[]
+}
+
+// Every time you record physical stats, a new row is created with a date.
+// This lets us plot growth curves over time.
+model Measurement {
+  id             String   @id @default(cuid())
+  athleteId      String
+  recordedAt     DateTime @default(now())
+
+  // Body
+  weightLbs      Float?
+  heightIn       Float?   // inches (e.g. 65.5)
+  inseamIn       Float?
+  wingspanIn     Float?
+  handSpanIn     Float?
+  handLengthIn   Float?
+  forearmLengthIn Float?
+  shoeSize       Float?
+
+  // Development
+  pubertyStage   Int?     // Tanner scale 1–5
+  notes          String?
+
+  athlete        Athlete  @relation(fields: [athleteId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// SLEEP
+// ─────────────────────────────────────────────
+
+model SleepLog {
+  id              String   @id @default(cuid())
+  athleteId       String
+  date            DateTime // the night of sleep
+
+  bedtime         DateTime
+  wakeTime        DateTime
+  // totalHours is calculated from bedtime/wakeTime — no need to store it
+
+  qualityRating   Int?     // 1–10
+  notes           String?
+
+  // Sleep hygiene checklist
+  noScreens90Min  Boolean  @default(false)
+  noMealsBeforeBed Boolean @default(false)
+  asleepBy10pm    Boolean  @default(false)
+  magnesiumTaken  Boolean  @default(false)
+
+  athlete         Athlete  @relation(fields: [athleteId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// TRAINING
+// ─────────────────────────────────────────────
+
+// You configure this list yourself (e.g. Basketball, Strength, Recovery)
+model TrainingType {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  trainingLogs TrainingLog[]
+}
+
+model TrainingLog {
+  id             String       @id @default(cuid())
+  athleteId      String
+  trainingTypeId String
+  date           DateTime
+
+  activity       String?      // e.g. "3-point shooting drills"
+  durationMins   Int?
+  intensity      Int?         // 1–10
+  notes          String?
+
+  athlete        Athlete      @relation(fields: [athleteId], references: [id])
+  trainingType   TrainingType @relation(fields: [trainingTypeId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// NUTRITION — Food Reference Data
+// ─────────────────────────────────────────────
+
+// USDA food items (pulled from their API and cached here)
+model UsdaFood {
+  id            String  @id @default(cuid())
+  fdcId         String  @unique  // USDA's own ID
+  name          String
+  category      String? // e.g. "Organic", "Grass-fed"
+  brand         String?
+
+  // Macros (per 100g)
+  calories      Float?
+  proteinG      Float?
+  carbsG        Float?
+  fatG          Float?
+  fiberG        Float?
+  sugarG        Float?
+
+  // Growth micros
+  vitaminDMcg   Float?
+  zincMg        Float?
+  magnesiumMg   Float?
+  vitaminK2Mcg  Float?
+  b1Mg          Float?
+  b2Mg          Float?
+  b3Mg          Float?
+  b6Mg          Float?
+  b12Mcg        Float?
+  folateMcg     Float?
+  omega3Mg      Float?
+  epaMg         Float?
+  dhaMg         Float?
+  alaMg         Float?
+  calciumMg     Float?
+  collagenMg    Float?
+  ironMg        Float?
+
+  ingredients   RecipeIngredient[]
+  logItems      NutritionLogItem[]
+}
+
+// Your custom brand entries — specific products in your house
+model Brand {
+  id            String  @id @default(cuid())
+  brandName     String  // e.g. "Vital Farms"
+  productName   String  // e.g. "Pasture-Raised Eggs"
+  notes         String? // e.g. "grass-fed, organic"
+
+  // Macros (per serving)
+  servingSize   String? // e.g. "2 eggs (100g)"
+  calories      Float?
+  proteinG      Float?
+  carbsG        Float?
+  fatG          Float?
+  fiberG        Float?
+  sugarG        Float?
+
+  // Growth micros
+  vitaminDMcg   Float?
+  zincMg        Float?
+  magnesiumMg   Float?
+  vitaminK2Mcg  Float?
+  b1Mg          Float?
+  b2Mg          Float?
+  b3Mg          Float?
+  b6Mg          Float?
+  b12Mcg        Float?
+  folateMcg     Float?
+  omega3Mg      Float?
+  epaMg         Float?
+  dhaMg         Float?
+  alaMg         Float?
+  calciumMg     Float?
+  collagenMg    Float?
+  ironMg        Float?
+
+  ingredients   RecipeIngredient[]
+  logItems      NutritionLogItem[]
+}
+
+// Your saved recipes (e.g. Buckwheat Pancakes)
+model Recipe {
+  id          String             @id @default(cuid())
+  name        String             // e.g. "Buckwheat Pancakes"
+  servings    Int                @default(1)
+  notes       String?
+  ingredients RecipeIngredient[]
+  logItems    NutritionLogItem[]
+}
+
+// Each ingredient in a recipe links to either a USDA food OR a brand product
+model RecipeIngredient {
+  id          String   @id @default(cuid())
+  recipeId    String
+  usdaFoodId  String?
+  brandId     String?
+  quantity    Float    // e.g. 2
+  unit        String   // e.g. "cups", "oz", "grams"
+
+  recipe      Recipe    @relation(fields: [recipeId], references: [id])
+  usdaFood    UsdaFood? @relation(fields: [usdaFoodId], references: [id])
+  brand       Brand?    @relation(fields: [brandId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// NUTRITION — Daily Logs
+// ─────────────────────────────────────────────
+
+model NutritionLog {
+  id          String             @id @default(cuid())
+  athleteId   String
+  date        DateTime
+
+  waterOz     Float?             // daily hydration
+  notes       String?
+
+  athlete     Athlete            @relation(fields: [athleteId], references: [id])
+  items       NutritionLogItem[]
+  supplements SupplementLog[]
+}
+
+// Each item in a meal — links to USDA food, brand, or recipe
+model NutritionLogItem {
+  id             String       @id @default(cuid())
+  nutritionLogId String
+  mealType       MealType     // breakfast, lunch, dinner, snack, pre-workout, post-workout
+  timeEaten      DateTime?
+
+  usdaFoodId     String?
+  brandId        String?
+  recipeId       String?
+
+  quantity       Float        // number of servings
+  unit           String?      // e.g. "serving", "oz", "cups"
+
+  // Anti-inflammatory / probiotic flags
+  isAntiInflammatory Boolean  @default(false)
+  isProbiotic        Boolean  @default(false)
+  probioticStrain    String?  // e.g. "Lactobacillus acidophilus"
+
+  nutritionLog   NutritionLog @relation(fields: [nutritionLogId], references: [id])
+  usdaFood       UsdaFood?    @relation(fields: [usdaFoodId], references: [id])
+  brand          Brand?       @relation(fields: [brandId], references: [id])
+  recipe         Recipe?      @relation(fields: [recipeId], references: [id])
+}
+
+// Supplements tracked separately (not food items)
+model SupplementLog {
+  id             String       @id @default(cuid())
+  nutritionLogId String
+  name           String       // e.g. "Vitamin D3"
+  dosage         String?      // e.g. "2000 IU"
+  timing         String?      // e.g. "morning", "pre-workout", "bedtime"
+  notes          String?
+
+  nutritionLog   NutritionLog @relation(fields: [nutritionLogId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  PRE_WORKOUT
+  POST_WORKOUT
+}
